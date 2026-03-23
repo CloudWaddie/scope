@@ -105,16 +105,7 @@ async def find(interaction: discord.Interaction, query: str):
         # Robustly handle different response types (Object, String, or Stream)
         shodan_query = ""
         if isinstance(ai_response, str):
-            import json
-            try:
-                # Try to parse as JSON if the endpoint returned a raw string
-                data = json.loads(ai_response)
-                if isinstance(data, dict) and "choices" in data:
-                    shodan_query = data["choices"][0]["message"]["content"]
-                else:
-                    shodan_query = ai_response
-            except:
-                shodan_query = ai_response
+            shodan_query = ai_response
         elif hasattr(ai_response, "choices"):
             shodan_query = ai_response.choices[0].message.content
         else:
@@ -124,6 +115,21 @@ async def find(interaction: discord.Interaction, query: str):
                 if hasattr(chunk, "choices") and chunk.choices[0].delta.content:
                     content_parts.append(chunk.choices[0].delta.content)
             shodan_query = "".join(content_parts)
+
+        # Aggressive JSON extraction (handles cases where proxies return raw JSON as content or response)
+        if shodan_query.strip().startswith("{"):
+            import json
+            try:
+                data = json.loads(shodan_query)
+                if isinstance(data, dict):
+                    if "choices" in data:
+                        shodan_query = data["choices"][0]["message"]["content"]
+                    elif "message" in data and isinstance(data["message"], dict):
+                        shodan_query = data["message"].get("content", shodan_query)
+                    elif "content" in data:
+                        shodan_query = data["content"]
+            except:
+                pass
 
         # Final cleaning
         shodan_query = shodan_query.strip().strip('"').strip("'").strip("`")
