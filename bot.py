@@ -45,7 +45,7 @@ def is_allowed():
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+    print(f"Scope Bot logged in as {bot.user} (ID: {bot.user.id})")
     print("------")
 
 @bot.tree.command(name="find", description="Ask AI to find something on Shodan")

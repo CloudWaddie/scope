@@ -1,6 +1,6 @@
-# Discord AI & Shodan Bot
+# Scope: Discord AI & Shodan Bot
 
-A Discord bot built with `discord.py` featuring OpenAI-compatible chat and Shodan host lookups. Designed for containerized deployment (e.g., Docker, Coolify).
+**Scope** is a Discord bot built with `discord.py` featuring OpenAI-compatible chat and Shodan host lookups. Designed for containerized deployment (e.g., Docker, Coolify).
 
 ## Features
 
