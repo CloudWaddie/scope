@@ -105,7 +105,16 @@ async def find(interaction: discord.Interaction, query: str):
         # Robustly handle different response types (Object, String, or Stream)
         shodan_query = ""
         if isinstance(ai_response, str):
-            shodan_query = ai_response
+            import json
+            try:
+                # Try to parse as JSON if the endpoint returned a raw string
+                data = json.loads(ai_response)
+                if isinstance(data, dict) and "choices" in data:
+                    shodan_query = data["choices"][0]["message"]["content"]
+                else:
+                    shodan_query = ai_response
+            except:
+                shodan_query = ai_response
         elif hasattr(ai_response, "choices"):
             shodan_query = ai_response.choices[0].message.content
         else:
