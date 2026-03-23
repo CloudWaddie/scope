@@ -151,7 +151,7 @@ async def find(interaction: discord.Interaction, query: str):
                 
                 current_embed.add_field(
                     name=f"🌐 {ip}:{port}",
-                    value=f"**Org:** `{org}`\n**Loc:** {city}, {country}",
+                    value=f"**Org:** `{org}`\n**Loc:** {city}, {country}\n**Link:** [View on Shodan](https://www.shodan.io/host/{ip})",
                     inline=False
                 )
             
