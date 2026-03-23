@@ -59,18 +59,28 @@ async def find(interaction: discord.Interaction, query: str):
 
     try:
         # 1. Ask AI to generate the Shodan query
-        prompt = (
-            f"Translate the following request into a Shodan search query. "
-            f"Respond ONLY with the search string, no explanation or quotes.\n"
-            f"Request: {query}"
+        system_prompt = (
+            "You are a Shodan query expert. Your task is to translate user requests into precise Shodan search queries.\n\n"
+            "Rules:\n"
+            "1. Respond ONLY with the search string.\n"
+            "2. DO NOT include quotes, explanations, or any other text.\n"
+            "3. DO NOT use markdown code blocks.\n"
+            "4. If the request is ambiguous, generate the most likely query.\n\n"
+            "Examples:\n"
+            "Request: Apache servers in New York\n"
+            "Response: product:Apache city:\"New York\"\n\n"
+            "Request: Webcams in Japan\n"
+            "Response: \"webcam\" country:JP"
         )
+        
         ai_response = await ai_client.chat.completions.create(
             model=AI_MODEL,
-            messages=[{"role": "system", "content": "You are a Shodan query expert."},
-                      {"role": "user", "content": prompt}]
+            messages=[{"role": "system", "content": system_prompt},
+                      {"role": "user", "content": f"Request: {query}"}]
         )
         
         # Robustly handle different response types (Object, String, or Stream)
+        shodan_query = ""
         if isinstance(ai_response, str):
             shodan_query = ai_response
         elif hasattr(ai_response, "choices"):
@@ -83,15 +93,18 @@ async def find(interaction: discord.Interaction, query: str):
                     content_parts.append(chunk.choices[0].delta.content)
             shodan_query = "".join(content_parts)
 
-        shodan_query = shodan_query.strip().strip('"').strip("'")
+        # Final cleaning
+        shodan_query = shodan_query.strip().strip('"').strip("'").strip("`")
+        if "shodan" in shodan_query.lower() and ":" not in shodan_query: # Edge case for weird model responses
+             shodan_query = shodan_query.replace("shodan", "").strip()
         
         # 2. Execute Shodan search
         results = shodan_client.search(shodan_query, limit=5)
         
         # 3. Build Embed
         embed = discord.Embed(
-            title=f"Shodan Results for: {shodan_query}",
-            description=f"Generated from: *{query}*",
+            title=f"Shodan Results",
+            description=f"**Query:** `{shodan_query}`\n**Original:** *{query}*",
             color=discord.Color.blue()
         )
         
@@ -114,7 +127,10 @@ async def find(interaction: discord.Interaction, query: str):
         await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        await interaction.followup.send(f"❌ Error: {str(e)}")
+        error_msg = f"❌ Error: {str(e)}"
+        if 'shodan_query' in locals() and shodan_query:
+            error_msg += f"\n**Query tried:** `{shodan_query}`"
+        await interaction.followup.send(error_msg)
 
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
