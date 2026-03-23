@@ -2,7 +2,7 @@ import os
 import discord
 from discord import app_commands
 from discord.ext import commands
-from openai import OpenAI
+from openai import AsyncOpenAI
 from shodan import Shodan
 from dotenv import load_dotenv
 
@@ -22,7 +22,7 @@ AI_MODEL = os.getenv("AI_MODEL", "cheap")
 SHODAN_API_KEY = os.getenv("SHODAN_API_KEY")
 
 # Initialize Clients
-ai_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
+ai_client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 shodan_client = Shodan(SHODAN_API_KEY) if SHODAN_API_KEY else None
 
 class MyBot(commands.Bot):
@@ -64,7 +64,7 @@ async def find(interaction: discord.Interaction, query: str):
             f"Respond ONLY with the search string, no explanation or quotes.\n"
             f"Request: {query}"
         )
-        ai_response = ai_client.chat.completions.create(
+        ai_response = await ai_client.chat.completions.create(
             model=AI_MODEL,
             messages=[{"role": "system", "content": "You are a Shodan query expert."},
                       {"role": "user", "content": prompt}]
@@ -76,9 +76,9 @@ async def find(interaction: discord.Interaction, query: str):
         elif hasattr(ai_response, "choices"):
             shodan_query = ai_response.choices[0].message.content
         else:
-            # Handle potential streaming response
+            # Handle potential streaming response (Async Iterator)
             content_parts = []
-            for chunk in ai_response:
+            async for chunk in ai_response:
                 if hasattr(chunk, "choices") and chunk.choices[0].delta.content:
                     content_parts.append(chunk.choices[0].delta.content)
             shodan_query = "".join(content_parts)
