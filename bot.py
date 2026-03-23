@@ -1,4 +1,5 @@
 import os
+import json
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -102,10 +103,27 @@ async def find(interaction: discord.Interaction, query: str):
                       {"role": "user", "content": f"Request: {query}"}]
         )
         
+        # Log the raw response for debugging (visible in Coolify logs)
+        print(f"DEBUG: AI Response Type: {type(ai_response)}")
+        print(f"DEBUG: AI Response Content: {ai_response}")
+        
         # Robustly handle different response types (Object, String, or Stream)
         shodan_query = ""
         if isinstance(ai_response, str):
             shodan_query = ai_response
+            # Aggressive JSON extraction if the entire response is a stringified JSON
+            if shodan_query.strip().startswith("{"):
+                try:
+                    data = json.loads(shodan_query)
+                    if isinstance(data, dict):
+                        if "choices" in data:
+                            shodan_query = data["choices"][0]["message"]["content"]
+                        elif "message" in data and isinstance(data["message"], dict):
+                            shodan_query = data["message"].get("content", shodan_query)
+                        elif "content" in data:
+                            shodan_query = data["content"]
+                except Exception as je:
+                    print(f"DEBUG: JSON Parse Error: {je}")
         elif hasattr(ai_response, "choices"):
             shodan_query = ai_response.choices[0].message.content
         else:
@@ -116,9 +134,8 @@ async def find(interaction: discord.Interaction, query: str):
                     content_parts.append(chunk.choices[0].delta.content)
             shodan_query = "".join(content_parts)
 
-        # Aggressive JSON extraction (handles cases where proxies return raw JSON as content or response)
+        # One more check: if the extracted content itself is STILL a JSON string
         if shodan_query.strip().startswith("{"):
-            import json
             try:
                 data = json.loads(shodan_query)
                 if isinstance(data, dict):
