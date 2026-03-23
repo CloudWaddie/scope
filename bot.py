@@ -87,14 +87,17 @@ async def find(interaction: discord.Interaction, query: str):
             "You are a Shodan query expert. Your task is to translate user requests into precise Shodan search queries.\n\n"
             "Rules:\n"
             "1. Respond ONLY with the search string.\n"
-            "2. DO NOT include quotes, explanations, or any other text.\n"
+            "2. DO NOT include quotes around the entire response, explanations, or any other text.\n"
             "3. DO NOT use markdown code blocks.\n"
-            "4. If the request is ambiguous, generate the most likely query.\n\n"
+            "4. Use valid Shodan filters like 'product:', 'city:', 'country:', 'port:', 'http.title:' (NOT html.title).\n"
+            "5. If the request is ambiguous, generate the most likely query.\n\n"
             "Examples:\n"
             "Request: Apache servers in New York\n"
             "Response: product:Apache city:\"New York\"\n\n"
             "Request: Webcams in Japan\n"
-            "Response: \"webcam\" country:JP"
+            "Response: \"webcam\" country:JP\n\n"
+            "Request: Sites with title Claude\n"
+            "Response: http.title:\"Claude\""
         )
         
         ai_response = await ai_client.chat.completions.create(
@@ -163,10 +166,24 @@ async def find(interaction: discord.Interaction, query: str):
             except:
                 pass
 
-        # Final cleaning
-        shodan_query = shodan_query.strip().strip('"').strip("'").strip("`")
-        if "shodan" in shodan_query.lower() and ":" not in shodan_query: # Edge case for weird model responses
-             shodan_query = shodan_query.replace("shodan", "").strip()
+        # Final cleaning: Only strip if they wrap the ENTIRE string
+        shodan_query = shodan_query.strip()
+        
+        # Remove markdown code blocks if AI ignored instructions
+        if shodan_query.startswith("```") and shodan_query.endswith("```"):
+            shodan_query = shodan_query.strip("`").strip()
+            if shodan_query.startswith("shodan"): # Remove "shodan" language identifier
+                shodan_query = shodan_query[6:].strip()
+        
+        # Remove wrapping quotes
+        if (shodan_query.startswith('"') and shodan_query.endswith('"')) or \
+           (shodan_query.startswith("'") and shodan_query.endswith("'")) or \
+           (shodan_query.startswith("`") and shodan_query.endswith("`")):
+            shodan_query = shodan_query[1:-1].strip()
+
+        # Handle edge case where AI might still include "shodan search" or similar
+        if shodan_query.lower().startswith("shodan search"):
+            shodan_query = shodan_query[13:].strip()
         
         # Truncate query if it's too long
         if len(shodan_query) > 1000:
