@@ -111,6 +111,11 @@ async def find(interaction: discord.Interaction, query: str):
         shodan_query = ""
         if isinstance(ai_response, str):
             shodan_query = ai_response
+            
+            # Clean up response: remove SSE markers if present (e.g., data: [DONE])
+            if "data: [DONE]" in shodan_query:
+                shodan_query = shodan_query.split("data: [DONE]")[0].strip()
+            
             # Aggressive JSON extraction if the entire response is a stringified JSON
             if shodan_query.strip().startswith("{"):
                 try:
@@ -124,6 +129,16 @@ async def find(interaction: discord.Interaction, query: str):
                             shodan_query = data["content"]
                 except Exception as je:
                     print(f"DEBUG: JSON Parse Error: {je}")
+                    # Fallback: if it's still failing due to trailing text, try finding the last }
+                    if "Extra data" in str(je):
+                        try:
+                            last_brace = shodan_query.rfind("}")
+                            if last_brace != -1:
+                                data = json.loads(shodan_query[:last_brace+1])
+                                if isinstance(data, dict) and "choices" in data:
+                                    shodan_query = data["choices"][0]["message"]["content"]
+                        except:
+                            pass
         elif hasattr(ai_response, "choices"):
             shodan_query = ai_response.choices[0].message.content
         else:
