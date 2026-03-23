@@ -1,0 +1,4 @@
+discord.py
+openai
+shodan
+python-dotenv
