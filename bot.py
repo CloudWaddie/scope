@@ -16,7 +16,7 @@ ALLOWED_USER_IDS = set(map(int, os.getenv("ALLOWED_USER_IDS", "").split(","))) i
 # AI Config
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-AI_MODEL = os.getenv("AI_MODEL", "gpt-3.5-turbo")
+AI_MODEL = os.getenv("AI_MODEL", "cheap")
 
 # Shodan Config
 SHODAN_API_KEY = os.getenv("SHODAN_API_KEY")
@@ -69,7 +69,21 @@ async def find(interaction: discord.Interaction, query: str):
             messages=[{"role": "system", "content": "You are a Shodan query expert."},
                       {"role": "user", "content": prompt}]
         )
-        shodan_query = ai_response.choices[0].message.content.strip().strip('"').strip("'")
+        
+        # Robustly handle different response types (Object, String, or Stream)
+        if isinstance(ai_response, str):
+            shodan_query = ai_response
+        elif hasattr(ai_response, "choices"):
+            shodan_query = ai_response.choices[0].message.content
+        else:
+            # Handle potential streaming response
+            content_parts = []
+            for chunk in ai_response:
+                if hasattr(chunk, "choices") and chunk.choices[0].delta.content:
+                    content_parts.append(chunk.choices[0].delta.content)
+            shodan_query = "".join(content_parts)
+
+        shodan_query = shodan_query.strip().strip('"').strip("'")
         
         # 2. Execute Shodan search
         results = shodan_client.search(shodan_query, limit=5)
