@@ -25,6 +25,29 @@ SHODAN_API_KEY = os.getenv("SHODAN_API_KEY")
 ai_client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 shodan_client = Shodan(SHODAN_API_KEY) if SHODAN_API_KEY else None
 
+class PaginationView(discord.ui.View):
+    def __init__(self, embeds):
+        super().__init__(timeout=60)
+        self.embeds = embeds
+        self.current_page = 0
+
+    @discord.ui.button(label="Previous", style=discord.ButtonStyle.gray, disabled=True)
+    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page -= 1
+        await self.update_view(interaction)
+
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.gray)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page += 1
+        await self.update_view(interaction)
+
+    async def update_view(self, interaction: discord.Interaction):
+        # Update button states
+        self.children[0].disabled = (self.current_page == 0)
+        self.children[1].disabled = (self.current_page == len(self.embeds) - 1)
+        
+        await interaction.response.edit_message(embed=self.embeds[self.current_page], view=self)
+
 class MyBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
@@ -99,32 +122,56 @@ async def find(interaction: discord.Interaction, query: str):
              shodan_query = shodan_query.replace("shodan", "").strip()
         
         # 2. Execute Shodan search
-        results = shodan_client.search(shodan_query, limit=5)
-        
-        # 3. Build Embed
-        embed = discord.Embed(
-            title=f"Shodan Results",
-            description=f"**Query:** `{shodan_query}`\n**Original:** *{query}*",
-            color=discord.Color.blue()
-        )
+        results = shodan_client.search(shodan_query, limit=15) # Increased limit for pagination
         
         if results['total'] > 0:
-            for result in results['matches']:
+            embeds = []
+            current_embed = None
+            
+            for i, result in enumerate(results['matches']):
+                # Start a new embed every 5 results or if it's the first
+                if i % 5 == 0:
+                    current_embed = discord.Embed(
+                        title=f"Shodan Results",
+                        description=f"**Query:** `{shodan_query}`\n**Original:** *{query}*",
+                        color=discord.Color.blue()
+                    )
+                    embeds.append(current_embed)
+                
                 ip = result.get('ip_str', 'Unknown IP')
                 port = result.get('port', 'Unknown Port')
                 org = result.get('org', 'Unknown Org')
-                location = f"{result.get('location', {{}}).get('city', 'N/A')}, {result.get('location', {{}}).get('country_name', 'N/A')}"
+                location_data = result.get('location', {})
+                city = location_data.get('city', 'N/A')
+                country = location_data.get('country_name', 'N/A')
                 
-                embed.add_field(
-                    name=f"IP: {ip}:{port}",
-                    value=f"**Org:** {org}\n**Loc:** {location}",
+                # Truncate long org names to prevent overflow
+                if len(org) > 50:
+                    org = org[:47] + "..."
+                
+                current_embed.add_field(
+                    name=f"🌐 {ip}:{port}",
+                    value=f"**Org:** `{org}`\n**Loc:** {city}, {country}",
                     inline=False
                 )
-            embed.set_footer(text=f"Total results: {results['total']} | Showing top 5")
-        else:
-            embed.description = f"No results found for query: `{shodan_query}`"
+            
+            # Set footers with page info
+            total_pages = len(embeds)
+            for i, embed in enumerate(embeds):
+                embed.set_footer(text=f"Page {i+1}/{total_pages} | Total results: {results['total']}")
 
-        await interaction.followup.send(embed=embed)
+            if total_pages > 1:
+                view = PaginationView(embeds)
+                await interaction.followup.send(embed=embeds[0], view=view)
+            else:
+                await interaction.followup.send(embed=embeds[0])
+        else:
+            embed = discord.Embed(
+                title="Shodan Results",
+                description=f"No results found for query: `{shodan_query}`\n**Original:** *{query}*",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=embed)
 
     except Exception as e:
         error_msg = f"❌ Error: {str(e)}"
