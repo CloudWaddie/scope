@@ -121,6 +121,10 @@ async def find(interaction: discord.Interaction, query: str):
         if "shodan" in shodan_query.lower() and ":" not in shodan_query: # Edge case for weird model responses
              shodan_query = shodan_query.replace("shodan", "").strip()
         
+        # Truncate query if it's too long
+        if len(shodan_query) > 1000:
+            shodan_query = shodan_query[:997] + "..."
+        
         # 2. Execute Shodan search
         results = shodan_client.search(shodan_query, limit=15) # Increased limit for pagination
         
@@ -128,26 +132,29 @@ async def find(interaction: discord.Interaction, query: str):
             embeds = []
             current_embed = None
             
+            # Truncate original query for display
+            display_query = query[:500] + "..." if len(query) > 500 else query
+            
             for i, result in enumerate(results['matches']):
                 # Start a new embed every 5 results or if it's the first
                 if i % 5 == 0:
                     current_embed = discord.Embed(
                         title=f"Shodan Results",
-                        description=f"**Query:** `{shodan_query}`\n**Original:** *{query}*",
+                        description=f"**Query:** `{shodan_query}`\n**Original:** *{display_query}*",
                         color=discord.Color.blue()
                     )
                     embeds.append(current_embed)
                 
                 ip = result.get('ip_str', 'Unknown IP')
                 port = result.get('port', 'Unknown Port')
-                org = result.get('org', 'Unknown Org')
+                org = result.get('org', 'Unknown Org') or "Unknown Organization"
                 location_data = result.get('location', {})
                 city = location_data.get('city', 'N/A')
                 country = location_data.get('country_name', 'N/A')
                 
                 # Truncate long org names to prevent overflow
-                if len(org) > 50:
-                    org = org[:47] + "..."
+                if len(org) > 100:
+                    org = org[:97] + "..."
                 
                 current_embed.add_field(
                     name=f"🌐 {ip}:{port}",
@@ -166,17 +173,28 @@ async def find(interaction: discord.Interaction, query: str):
             else:
                 await interaction.followup.send(embed=embeds[0])
         else:
+            display_query = query[:500] + "..." if len(query) > 500 else query
             embed = discord.Embed(
                 title="Shodan Results",
-                description=f"No results found for query: `{shodan_query}`\n**Original:** *{query}*",
+                description=f"No results found for query: `{shodan_query}`\n**Original:** *{display_query}*",
                 color=discord.Color.red()
             )
             await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        error_msg = f"❌ Error: {str(e)}"
+        error_str = str(e)
+        if len(error_str) > 1000:
+            error_str = error_str[:997] + "..."
+            
+        error_msg = f"❌ Error: {error_str}"
         if 'shodan_query' in locals() and shodan_query:
-            error_msg += f"\n**Query tried:** `{shodan_query}`"
+            q_clean = shodan_query[:500] + "..." if len(shodan_query) > 500 else shodan_query
+            error_msg += f"\n**Query tried:** `{q_clean}`"
+        
+        # Final safety check for Discord's 2000 char limit
+        if len(error_msg) > 2000:
+            error_msg = error_msg[:1997] + "..."
+            
         await interaction.followup.send(error_msg)
 
 @bot.tree.error
